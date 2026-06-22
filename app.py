@@ -85,7 +85,7 @@ def call_tavily_search(query):
         data = response.json()
         snippets = [s["content"] for s in data.get("results", []) if s.get("content")]
         answer = data.get("answer", "No direct answer found.")
-        return f"Answer: {answer}\nSnippets: {\n.join(snippets)}"
+        return f"Answer: {answer}\nSnippets: {'\n'.join(snippets)}"
     except requests.exceptions.RequestException as e:
         print(f"Error calling Tavily API: {e}")
         return f"Error: Failed to perform web search. {e}"
@@ -145,7 +145,7 @@ def chat():
         tool_calls_made = False
         try:
             if research_mode:
-                yield f"data: {json.dumps({"researching": "1/3"})}\n\n"
+                yield f"data: {json.dumps({'researching': '1/3'})}\n\n"
                 # Model generates 3 search queries
                 research_queries_response = groq_client.chat.completions.create(
                     messages=full_messages + [{
@@ -166,14 +166,14 @@ def chat():
 
                 all_research_results = []
                 for i, query in enumerate(research_queries):
-                    yield f"data: {json.dumps({"researching": f"{i+1}/{len(research_queries)}"})}\n\n"
+                    yield f"data: {json.dumps({'researching': f'{i+1}/{len(research_queries)}'})}\n\n"
                     search_result = call_tavily_search(query)
                     all_research_results.append(f"Query {i+1}: {query}\nResult: {search_result}")
                     time.sleep(1) # Simulate delay
 
                 research_summary_prompt = "Synthesize a comprehensive, structured report-style answer based on the following research results, citing sources where appropriate:\n\n" + "\n---\n\n".join(all_research_results)
                 full_messages.append({"role": "user", "content": research_summary_prompt})
-                yield f"data: {json.dumps({"researching": "done"})}\n\n"
+                yield f"data: {json.dumps({'researching': 'done'})}\n\n"
 
             stream = groq_client.chat.completions.create(
                 messages=full_messages,
@@ -193,9 +193,9 @@ def chat():
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
                         if function_name == "web_search":
-                            yield f"data: {json.dumps({"searching": True})}\n\n"
+                            yield f"data: {json.dumps({'searching': True})}\n\n"
                             search_result = call_tavily_search(function_args["query"])
-                            yield f"data: {json.dumps({"searching": False})}\n\n"
+                            yield f"data: {json.dumps({'searching': False})}\n\n"
                             # Append tool output to messages and continue streaming
                             full_messages.append(chunk.choices[0].delta.model_dump())
                             full_messages.append({
@@ -215,24 +215,24 @@ def chat():
                             for tool_chunk in tool_stream:
                                 if tool_chunk.choices[0].delta.content is not None:
                                     text = tool_chunk.choices[0].delta.content
-                                    yield f"data: {json.dumps({"text": text})}\n\n"
+                                    yield f"data: {json.dumps({'text': text})}\n\n"
                             yield "data: [DONE]\n\n"
                             return # Exit after tool call and its follow-up
 
                 if chunk.choices[0].delta.content is not None:
                     text = chunk.choices[0].delta.content
-                    yield f"data: {json.dumps({"text": text})}\n\n"
+                    yield f"data: {json.dumps({'text': text})}\n\n"
             
             # If no tool calls were made, and it was a factual question, mark as not verified
             if not tool_calls_made and not research_mode and any(msg.get("is_factual_question", False) for msg in messages):
-                yield f"data: {json.dumps({"verified": False})}\n\n"
+                yield f"data: {json.dumps({'verified': False})}\n\n"
             elif tool_calls_made or research_mode:
-                yield f"data: {json.dumps({"verified": True})}\n\n"
+                yield f"data: {json.dumps({'verified': True})}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as e:
             print(f"Error during Groq API call: {e}")
-            yield f"data: {json.dumps({"text": f'Error: {e}'})}\n\n"
+            yield f"data: {json.dumps({'text': f'Error: {e}'})}\n\n"
             yield "data: [DONE]\n\n"
 
     return Response(generate_groq_response(), mimetype="text/event-stream")
@@ -259,6 +259,9 @@ def share_chat(share_id):
         return "Chat not found", 404
     # Render a read-only view of the chat
     return render_template("index.html", shared_chat=json.dumps(chat_data))
+
+# Vercel deployment point
+app = app
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
